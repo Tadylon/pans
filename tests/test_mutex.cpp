@@ -54,6 +54,43 @@ private:
     std::atomic_flag m_mutex = ATOMIC_FLAG_INIT;
 };
 
+class AtomicWaitLock
+{
+public:
+    using Lock = std::lock_guard<AtomicWaitLock>;
+
+    AtomicWaitLock() noexcept = default;
+    ~AtomicWaitLock() noexcept = default;
+
+    AtomicWaitLock(const AtomicWaitLock&) = delete;
+    AtomicWaitLock& operator=(const AtomicWaitLock&) = delete;
+
+    void lock() noexcept
+    {
+        bool expected = false;
+        while (!m_mutex.compare_exchange_weak(expected, true, std::memory_order_acquire, std::memory_order_relaxed))
+        {
+            std::atomic_wait_explicit(&m_mutex, true, std::memory_order_relaxed);
+            expected = false;
+        }
+    }
+
+    [[nodiscard]] bool try_lock() noexcept
+    {
+        bool expected = false;
+        return m_mutex.compare_exchange_strong(expected, true, std::memory_order_acquire, std::memory_order_relaxed);
+    }
+
+    void unlock() noexcept
+    {
+        m_mutex.store(false, std::memory_order_release);
+        std::atomic_notify_one(&m_mutex);
+    }
+
+private:
+    std::atomic<bool> m_mutex{false};
+};
+
 std::uint64_t OperationsForThread(std::size_t thread_index, std::size_t thread_count)
 {
     const std::uint64_t base = g_target / thread_count;
@@ -152,9 +189,60 @@ int main(int argc, char** argv)
         std::cout << "threads: " << thread_count << '\n';
         PrintResult("pthread_spinlock::Spinlock", Run([&]() { return BenchmarkMutex<pans::Spinlock>(thread_count); }));
         PrintResult("atomic_flag::Spinlock", Run([&]() { return BenchmarkMutex<Spinlock>(thread_count); }));
+        PrintResult("atomic_wait", Run([&]() { return BenchmarkMutex<AtomicWaitLock>(thread_count); }));
         PrintResult("std::mutex", Run([&]() { return BenchmarkMutex<std::mutex>(thread_count); }));
         std::cout << '\n';
     }
 
     return EXIT_SUCCESS;
 }
+
+/**
+ *
+感谢B站网友：青烟长弧  提供的使用std::atomic_wait实现自旋锁的思路
+实测数据如下(平台6核 x86_64 Debian机器)：
+
+dev@debian:~/Code/second/pans/bin/tests$ ./test_mutex 1000000
+operations: 1000000, average of 7 runs
+
+threads: 1
+pthread_spinlock::Spinlock    14335512.29 ns    total, 14.34 ns/op
+atomic_flag::Spinlock         15890191.71 ns    total, 15.89 ns/op
+atomic_wait                   22092990.57 ns    total, 22.09 ns/op
+std::mutex                    25561656.00 ns    total, 25.56 ns/op
+
+threads: 2
+pthread_spinlock::Spinlock    58567846.29 ns    total, 58.57 ns/op
+atomic_flag::Spinlock         57283615.14 ns    total, 57.28 ns/op
+atomic_wait                   32876545.57 ns    total, 32.88 ns/op
+std::mutex                    59783068.14 ns    total, 59.78 ns/op
+
+threads: 4
+pthread_spinlock::Spinlock    107808279.29 ns   total, 107.81 ns/op
+atomic_flag::Spinlock         77783261.57 ns    total, 77.78 ns/op
+atomic_wait                   78707336.14 ns    total, 78.71 ns/op
+std::mutex                    65705970.43 ns    total, 65.71 ns/op
+
+threads: 8
+pthread_spinlock::Spinlock    172506586.29 ns   total, 172.51 ns/op
+atomic_flag::Spinlock         123846987.86 ns   total, 123.85 ns/op
+atomic_wait                   215281753.43 ns   total, 215.28 ns/op
+std::mutex                    81340459.29 ns    total, 81.34 ns/op
+
+threads: 10
+pthread_spinlock::Spinlock    203061361.57 ns   total, 203.06 ns/op
+atomic_flag::Spinlock         168216887.14 ns   total, 168.22 ns/op
+atomic_wait                   238041247.14 ns   total, 238.04 ns/op
+std::mutex                    84330990.43 ns    total, 84.33 ns/op
+ 
+结论：
+
+单核基本消耗：                  pthread_spinlock更优秀，atomic_flag与之旗鼓相当且有更好的移植性
+线程数较少时(2线程)：           atomic_wait性能更好，消耗几乎是其它几种方案的一半
+线程数较多(4线程)：             std::mutex性能更优异，更稳定，其它几种方案出现了明显的性能退化趋势
+线程数大于核心数时(8线程10线程)：std::mutex更稳定，其它几种方案性能成倍恶化
+
+基于此结果，在后续选择锁的场景中，我会选用std::mutex, 会谨慎选择自旋锁
+
+ * 
+ */
