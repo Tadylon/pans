@@ -1,5 +1,6 @@
 #include "logger/formatter.h"
 #include <unordered_map>
+#include <charconv>
 
 namespace pans::detail {
 
