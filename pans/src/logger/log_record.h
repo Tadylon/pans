@@ -3,7 +3,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <source_location>
 #include <string_view>
 
 #include <pans/logger/log_level.h>
@@ -22,8 +21,7 @@ struct LogRecordView
     u64 m_fiberId = 0; // 协程ID
     std::string_view m_threadName; // 线程名
     std::string_view m_fileName; // 文件名
-    std::string_view m_functionName; // 函数名
-    std::source_location m_location; // C++20新的标准，文件位置，编译器自动在编译器生成
+    std::uint32_t m_line = 0; // 行号
 };
 
 } // namespace pans::detail

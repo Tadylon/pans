@@ -1,6 +1,10 @@
 #include "logger/formatter.h"
-#include <unordered_map>
+#include <array>
 #include <charconv>
+#include <cstdint>
+#include <ctime>
+#include <stdexcept>
+#include <unordered_map>
 
 namespace pans::detail {
 
@@ -15,7 +19,7 @@ Formatter::Formatter(std::string_view pattern)
     }
 }
 
-void Formatter::format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept
+void Formatter::format(const LogRecordView& record, FormattedRecordBuffer& output) const
 {
     for(const auto& item : m_items)
     {
@@ -24,7 +28,7 @@ void Formatter::format(const LogRecordView& record, FormattedRecordBuffer& outpu
 }
 
 template <typename T>
-void AppendInteger(FormattedRecordBuffer& output, T value) noexcept
+void AppendInteger(FormattedRecordBuffer& output, T value)
 {
     std::array<char, 24> buffer{};
     const auto result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value); // 基本上不会失败，转失败了也没关系
@@ -38,7 +42,7 @@ public:
     explicit LiteralFormatItem(std::string value)
         : m_value(std::move(value))
     {}
-    void format(const LogRecordView&, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView&, FormattedRecordBuffer& output) const override
     {
         output.append(m_value);
     }
@@ -50,7 +54,7 @@ private:
 class MessageFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         output.append(record.m_message);
     }
@@ -59,7 +63,7 @@ public:
 class LevelFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         output.append(LogLevel::ToString(record.m_level));
     }
@@ -68,7 +72,7 @@ public:
 class ElapsedFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         AppendInteger(output, std::chrono::duration_cast<std::chrono::milliseconds>(record.m_elapsed).count());
     }
@@ -77,7 +81,7 @@ public:
 class LoggerNameFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         output.append(record.m_loggerName);
     }
@@ -86,7 +90,7 @@ public:
 class ThreadIdFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         AppendInteger(output, record.m_threadId);
     }
@@ -95,7 +99,7 @@ public:
 class NewLineFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView&, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView&, FormattedRecordBuffer& output) const override
     {
         output.append('\n');
     }
@@ -107,10 +111,13 @@ public:
     explicit DateTimeFormatItem(std::string_view format)
         : m_format(format.empty() ? DEFAULT_DATE_FORMAT : format)
     {}
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
+        // Warning: 同一个进程中的datetime format要一致，否则会串
         static thread_local time_t last_second = 0;
         static thread_local char cached_date_time[20] = {'\0'};
+        
         const auto duration = record.m_timestamp.time_since_epoch();
         const time_t current_second = static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(duration).count());
         if(current_second != last_second)
@@ -120,6 +127,12 @@ public:
             const errno_t result = localtime_s(&buffer, &current_second);
             ASSERT_RETNONE2(result == 0, "failed to convert log time to local time");
 #else
+            /**
+             * @brief localtime_r是线程安全的，但是消耗也大：
+             * 1. 全局有锁可能排队
+             * 2. 需要进行复杂的时区计算(尤其是有过夏令时变更历史的时区)
+             * 3. 如果系统没有加载时区信息或者要求响应时区变更, 每次调用这个接口还要去发起磁盘IO，读系统文件/etc/localtime
+             */
             const std::tm* result = localtime_r(&current_second, &buffer);
             ASSERT_RETNONE2(result != nullptr, "failed to convert log time to local time");
 #endif
@@ -138,7 +151,7 @@ private:
 class MicrosecondsFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         const auto total_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(record.m_timestamp.time_since_epoch()).count();
         std::int64_t microseconds = total_microseconds % 1'000'000;
@@ -146,14 +159,26 @@ public:
         {
             microseconds += 1'000'000;
         }
-        AppendInteger(output, microseconds);
+
+        // 秒内微秒必须补齐成固定六位，否则 12:00:00.1234 这样的时间戳无法解析，也无法按字典序排序。
+        std::array<char, MICROSECONDS_WIDTH> digits{};
+        auto remaining = static_cast<std::uint32_t>(microseconds);
+        for(std::size_t index = digits.size(); index-- > 0;)
+        {
+            digits[index] = static_cast<char>('0' + remaining % 10);
+            remaining /= 10;
+        }
+        output.append(digits.data(), digits.size());
     }
+
+private:
+    static constexpr std::size_t MICROSECONDS_WIDTH = 6;
 };
 
 class FileNameFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         output.append(record.m_fileName);
     }
@@ -162,25 +187,16 @@ public:
 class LineFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
-        AppendInteger(output, record.m_location.line());
-    }
-};
-
-class FunctionNameFormatItem final : public Formatter::FormatItem
-{
-public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
-    {
-        output.append(record.m_functionName);
+        AppendInteger(output, record.m_line);
     }
 };
 
 class TabFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView&, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView&, FormattedRecordBuffer& output) const override
     {
         output.append('\t');
     }
@@ -189,7 +205,7 @@ public:
 class FiberIdFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         AppendInteger(output, record.m_fiberId);
     }
@@ -198,7 +214,7 @@ public:
 class ThreadNameFormatItem final : public Formatter::FormatItem
 {
 public:
-    void format(const LogRecordView& record, FormattedRecordBuffer& output) const noexcept override
+    void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         output.append(record.m_threadName);
     }
@@ -221,20 +237,19 @@ template <typename Item>
 [[nodiscard]] const std::unordered_map<char, FormatItemFactory>& GetFormatItemFactories()
 {
     static const std::unordered_map<char, FormatItemFactory> FORMAT_ITEM_FACTORIES{
-        {'m', &CreateSimpleFormatItem<MessageFormatItem>}, // m代表MessageFormatItem, 它是程序员写日志时插入的message
-        {'p', &CreateSimpleFormatItem<LevelFormatItem>}, // p代表LevelFormatItem
-        {'r', &CreateSimpleFormatItem<ElapsedFormatItem>}, // r代表ElapsedFormatItem
-        {'c', &CreateSimpleFormatItem<LoggerNameFormatItem>}, //c日志器名称
-        {'t', &CreateSimpleFormatItem<ThreadIdFormatItem>},//t 线程id
-        {'n', &CreateSimpleFormatItem<NewLineFormatItem>},// n换行
-        {'d', &CreateConfiguredFormatItem<DateTimeFormatItem>},//d代表datetime
-        {'u', &CreateSimpleFormatItem<MicrosecondsFormatItem>},//u毫秒数
-        {'f', &CreateSimpleFormatItem<FileNameFormatItem>},//小f文件名
-        {'l', &CreateSimpleFormatItem<LineFormatItem>},//小l行号
-        {'M', &CreateSimpleFormatItem<FunctionNameFormatItem>},//大M函数名
-        {'T', &CreateSimpleFormatItem<TabFormatItem>},//大T制表符
-        {'F', &CreateSimpleFormatItem<FiberIdFormatItem>},//大F协程ID
-        {'N', &CreateSimpleFormatItem<ThreadNameFormatItem>},//大N线程名
+        {'m', &CreateSimpleFormatItem<MessageFormatItem>},          // 日志内容
+        {'p', &CreateSimpleFormatItem<LevelFormatItem>},            // LogLevel
+        {'r', &CreateSimpleFormatItem<ElapsedFormatItem>},          // 起服已过时间
+        {'c', &CreateSimpleFormatItem<LoggerNameFormatItem>},       // 日志器名称
+        {'t', &CreateSimpleFormatItem<ThreadIdFormatItem>},         // 线程id
+        {'n', &CreateSimpleFormatItem<NewLineFormatItem>},          // 换行
+        {'d', &CreateConfiguredFormatItem<DateTimeFormatItem>},     // datetime
+        {'u', &CreateSimpleFormatItem<MicrosecondsFormatItem>},     // 毫秒数
+        {'f', &CreateSimpleFormatItem<FileNameFormatItem>},         // 文件名
+        {'l', &CreateSimpleFormatItem<LineFormatItem>},             // 行号
+        {'T', &CreateSimpleFormatItem<TabFormatItem>},              // 制表符
+        {'F', &CreateSimpleFormatItem<FiberIdFormatItem>},          // 协程ID
+        {'N', &CreateSimpleFormatItem<ThreadNameFormatItem>},       // 大N线程名
     };
     return FORMAT_ITEM_FACTORIES;
 }
@@ -247,7 +262,7 @@ template <typename Item>
     return it->second(format);
 }
 
-void Formatter::addLiteral(std::string& literal) noexcept
+void Formatter::addLiteral(std::string& literal)
 {
     if(literal.empty())
     {
@@ -257,8 +272,8 @@ void Formatter::addLiteral(std::string& literal) noexcept
     literal.clear();
 }
 
-// %d{%Y-%m-%d %H:%M:%S}.%u%Tthread=%t%Tfiber=%F%T[%p]%T%f:%l%T%M%T%m%n
-int Formatter::parse() noexcept
+// %d{%Y-%m-%d %H:%M:%S}.%u%Tthread=%t%Tfiber=%F%T[%p]%T%f:%l%T%m%n
+int Formatter::parse()
 {
     std::string literal;
     for(std::size_t index = 0; index < m_pattern.size(); ++index)
@@ -286,7 +301,9 @@ int Formatter::parse() noexcept
         }
         m_items.push_back(CreateFormatItem(directive, item_format));
     }
+    
     addLiteral(literal);
+    
     for(const auto& item : m_items)
     {
         ASSERT_RETVAL2(item != nullptr, -3, "logger formatter contains a null format item");
