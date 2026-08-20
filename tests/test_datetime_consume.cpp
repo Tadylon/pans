@@ -27,7 +27,6 @@ void test_time(int times)
         auto now = std::chrono::system_clock::now();
         auto duration = now.time_since_epoch();
         time_t current_second = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-        long micros = std::chrono::duration_cast<std::chrono::microseconds>(duration % std::chrono::seconds(1)).count();
 
         /**
          * localtime_r和strftime的性能消耗是chrono::system_clock的10~15倍
@@ -50,7 +49,6 @@ void test_time(int times)
     auto diff1_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(diff1).count();
     auto diff2_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(diff2).count();
 
-    //
     std::cout << "基础耗时: " << base_ns << " ns" << std::endl;
     std::cout << "原耗时: " << diff1_ns << " ns" << std::endl;
     std::cout << "现耗时: " << diff2_ns << " ns" << std::endl;
@@ -59,12 +57,15 @@ void test_time(int times)
 
 int main(int argc, char** argv)
 {
+    int times = 0;
     if(argc < 2)
     {
-        std::cout << "Usage: " << argv[0] << " <times>" << std::endl;
-        return 0;
+       times = 1000000; 
     }
-    int times = std::atoi(argv[1]);
+    else
+    {
+        times = std::stoull(argv[1]);
+    }
     test_time(times);
     return 0;
 }
