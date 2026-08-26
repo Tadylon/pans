@@ -3,7 +3,6 @@
 #include <charconv>
 #include <cstdint>
 #include <ctime>
-#include <stdexcept>
 #include <unordered_map>
 
 namespace pans::detail {
@@ -13,9 +12,9 @@ constexpr std::string_view DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S";
 Formatter::Formatter(std::string_view pattern)
     : m_pattern(pattern)
 {
-    if(parse())
+    if(parse() != 0)
     {
-        throw std::invalid_argument("invalid log format. parse failed.");
+        throw std::invalid_argument("invalid logger format pattern");
     }
 }
 
