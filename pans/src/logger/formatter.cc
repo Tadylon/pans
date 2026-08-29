@@ -1,9 +1,10 @@
 #include "logger/formatter.h"
 #include <array>
 #include <charconv>
-#include <cstdint>
 #include <ctime>
 #include <unordered_map>
+
+#include <pans/macros.h>
 
 namespace pans::detail {
 
@@ -153,7 +154,7 @@ public:
     void format(const LogRecordView& record, FormattedRecordBuffer& output) const override
     {
         const auto total_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(record.m_timestamp.time_since_epoch()).count();
-        std::int64_t microseconds = total_microseconds % 1'000'000;
+        s64 microseconds = total_microseconds % 1'000'000;
         if(microseconds < 0)
         {
             microseconds += 1'000'000;
@@ -161,7 +162,7 @@ public:
 
         // 秒内微秒必须补齐成固定六位，否则 12:00:00.1234 这样的时间戳无法解析，也无法按字典序排序。
         std::array<char, MICROSECONDS_WIDTH> digits{};
-        auto remaining = static_cast<std::uint32_t>(microseconds);
+        auto remaining = static_cast<u32>(microseconds);
         for(std::size_t index = digits.size(); index-- > 0;)
         {
             digits[index] = static_cast<char>('0' + remaining % 10);

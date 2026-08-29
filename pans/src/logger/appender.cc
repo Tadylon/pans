@@ -43,7 +43,7 @@ void Appender::sync()
 
 void Appender::Impl::append(LogLevel::Level level, std::string_view formatted_record) noexcept
 {
-    if(static_cast<std::uint8_t>(level) < static_cast<std::uint8_t>(getLevel()))
+    if(static_cast<u8>(level) < static_cast<u8>(getLevel()))
     {
         return;
     }
