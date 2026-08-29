@@ -91,7 +91,7 @@ Logger::Impl::Impl(std::string name)
 
 bool Logger::Impl::shouldLog(LogLevel::Level level) const noexcept
 {
-    if(static_cast<std::uint8_t>(level) < static_cast<std::uint8_t>(getLevel()))
+    if(static_cast<u8>(level) < static_cast<u8>(getLevel()))
     {
         return false;
     }
@@ -107,7 +107,7 @@ bool Logger::Impl::shouldLog(LogLevel::Level level) const noexcept
 
 void Logger::Impl::submit(const detail::LogRecordView& record) noexcept
 {
-    if(static_cast<std::uint8_t>(record.m_level) < static_cast<std::uint8_t>(getLevel()))
+    if(static_cast<u8>(record.m_level) < static_cast<u8>(getLevel()))
     {
         return;
     }
@@ -225,9 +225,9 @@ void Logger::Impl::sync()
     }
 }
 
-void Logger::Impl::setRoot(LoggerPtr root) noexcept
+void Logger::Impl::setRoot(const LoggerPtr& root) noexcept
 {
-    m_root = std::move(root);
+    m_root = root;
 }
 
 void detail::LoggerAccess::Submit(Logger& logger, const LogRecordView& record) noexcept
@@ -235,9 +235,9 @@ void detail::LoggerAccess::Submit(Logger& logger, const LogRecordView& record) n
     logger.m_impl->submit(record);
 }
 
-void detail::LoggerAccess::SetRoot(Logger& logger, LoggerPtr root) noexcept
+void detail::LoggerAccess::SetRoot(Logger& logger, const LoggerPtr& root) noexcept
 {
-    logger.m_impl->setRoot(std::move(root));
+    logger.m_impl->setRoot(root);
 }
 
 class LoggerManager final

@@ -32,7 +32,7 @@ public:
     void flush();
     void sync();
 
-    void setRoot(LoggerPtr root) noexcept;
+    void setRoot(const LoggerPtr& root) noexcept;
 private:
     std::string m_name;
     std::atomic<LogLevel::Level> m_level{LogLevel::Level::LOG_LV_DEBUG};
@@ -53,7 +53,7 @@ class LoggerAccess final
 {
 public:
     static void Submit(Logger& logger, const LogRecordView& record) noexcept;
-    static void SetRoot(Logger& logger, LoggerPtr root) noexcept;
+    static void SetRoot(Logger& logger, const LoggerPtr& root) noexcept;
 };
 
 } // namespace detail
