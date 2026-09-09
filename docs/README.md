@@ -26,7 +26,7 @@ git submodule add -b master https://github.com/madler/zlib.git third_party/zlib
 
 ### 首次同步pans
 
-git clone --recurse-submodules https://gitee.com/huajianke2026.git
+git clone --recurse-submodules https://gitee.com/huajianke2026/pans.git
 
 ### 更新pans
 

@@ -39,7 +39,8 @@ sudo apt install -y --no-install-recommends \
     tree \
     iputils-ping \
     iproute2 \
-    net-tools
+    net-tools \
+    libdw-dev
 
 # Step 2: Create workstation directory and configure git
 echo -e "\n${YELLOW}[Step 2/7]${NC} 创建 workstation 目录并配置 git..."
