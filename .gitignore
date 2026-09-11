@@ -17,7 +17,5 @@ bin-release/
 # should NOT be excluded as they contain compiler settings and other important
 # information for Eclipse / Flash Builder.
 
-build 
-bin
-lib
-
+[Bb]uild
+third_party/output
