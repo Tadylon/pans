@@ -12,6 +12,8 @@ namespace pans {
 
 [[nodiscard]] PANS_API u64 GetFiberId() noexcept;
 
+[[nodiscard]] PANS_API std::string GetBacktrace(int size = 20, int skip = 1, const std::string& prefix = "");
+
 } // namespace pans
 
 #endif // PANS_INCLUDE_PANS_UTILS_SYSTEM_UTILS_H
