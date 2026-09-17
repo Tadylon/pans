@@ -19,16 +19,16 @@ template<typename T>
 
 [[nodiscard]] constexpr std::string_view ExtractMsvcTypeName(std::string_view signature) noexcept
 {
-    constexpr std::string_view maker = "TypeNameProbe<";
+    constexpr std::string_view marker = "TypeNameProbe<";
     constexpr std::string_view suffix = ">(void)";
 
-    const std::size_t maker_pos = signature.rfind(maker);
-    if(maker_pos == std::string_view::npos)
+    const std::size_t marker_pos = signature.rfind(marker);
+    if(marker_pos == std::string_view::npos)
     {
         return signature;
     }
 
-    const std::size_t begin = maker_pos + maker.size();
+    const std::size_t begin = marker_pos + marker.size();
     const std::size_t end = signature.rfind(suffix);
     if(end == std::string_view::npos || end <= begin)
     {
@@ -50,16 +50,16 @@ template<typename T>
     static_assert(type_name != signature, "无法识别当前 MSVC 的函数签名格式");
     return type_name;
 #else
-    constexpr std::string_view maker = "T = ";
-    constexpr std::size_t maker_pos = signature.find(maker);
+    constexpr std::string_view marker = "T = ";
+    constexpr std::size_t marker_pos = signature.find(marker);
 
-    if constexpr (maker_pos == std::string_view::npos)
+    if constexpr (marker_pos == std::string_view::npos)
     {
         return signature;
     }
     else
     {
-        constexpr std::size_t begin = maker_pos + maker.size();
+        constexpr std::size_t begin = marker_pos + marker.size();
         constexpr std::size_t semicolon = signature.find(';', begin);
         constexpr std::size_t bracket = signature.find(']');
         constexpr std::size_t end = semicolon != std::string_view::npos ? semicolon : bracket;
