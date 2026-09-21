@@ -92,7 +92,7 @@ concept YamlEncodable = requires(const T& value)
     { YAML::convert<T>::encode(value) } -> std::convertible_to<YAML::Node>;
 };
 
-}
+} // namespace detail
 
 template <typename T>
 class ConfigConvert
@@ -126,7 +126,7 @@ public:
         }
         else
         {
-            static_assert(detail::YamlDecodable<T>, "该类型需要特化 pans::ConfigConvert<T> 或 YMAL::convert<T>");
+            static_assert(detail::YamlDecodable<T>, "该类型需要特化 pans::ConfigConvert<T> 或 YAML::convert<T>");
             T value{};
             if(!node.IsDefined() || !YAML::convert<T>::decode(node, value))
             {
@@ -249,7 +249,7 @@ public:
     }
 };
 
-}
+} // namespace detail
 
 template <typename T, typename A>
 class ConfigConvert<std::vector<T, A>> : public detail::SequenceConvert<std::vector<T, A>>
@@ -275,8 +275,6 @@ template <typename T, typename H, typename E, typename A>
 class ConfigConvert<std::unordered_map<std::string, T, H, E, A>> : public detail::StringMapConvert<std::unordered_map<std::string, T, H, E, A>>
 {};
 
+} // namespace pans
 
-}
-
-
-#endif
+#endif // PANS_INCLUDE_PANS_CONFIG_CONVERT_H
