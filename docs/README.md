@@ -34,3 +34,43 @@ git clone --recurse-submodules https://gitee.com/huajianke2026/pans.git
 
 git submodule update --init --recursive
 
+# 接入Boost.Context
+
+## boost地址
+https://www.boost.org/
+https://github.com/boostorg/boost.git
+
+## 接入步骤
+
+### 下载
+wget https://archives.boost.io/release/1.92.0/source/boost_1_92_0.tar.gz
+(下载之后位置在/root/workstation下面)
+
+### 解压
+tar -zvxf boost_1_92_0.tar.gz
+
+### 配置
+(当前目录在/root/workstation下面, 下同)
+cd boost_1_92_0
+./bootstrap.sh
+
+### 编译bcp
+./b2 tools/bcp
+
+### 创建boost目录
+(pans存放在/root/workstation下面)
+mkdir /root/workstation/pans/third_party/boost_1_92_0
+
+### 拷贝项目需要的内容
+
+dist/bin/bcp \
+  --boost=/root/workstation/boost_1_92_0 \
+  boost/context/fiber.hpp \
+  boost/context/detail/exception.hpp \
+  boost/context/fixedsize_stack.hpp \
+  boost/context/protected_fixedsize_stack.hpp \
+  boost/context/stack_traits.hpp \
+  /root/workstation/pans/third_party/boost_1_92_0
+
+cp LICENSE_1_0.txt /root/workstation/pans/third_party/boost_1_92_0
+
